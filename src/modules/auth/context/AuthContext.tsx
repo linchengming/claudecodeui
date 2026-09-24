@@ -29,12 +29,13 @@ type AuthActionResult = { success: true } | { success: false; error: string };
 type AuthSessionPayload = {
   token?: string;
   user?: AuthUser;
-  error?: string;
+  error?: string | { code?: string; message?: string };
   message?: string;
 };
 
 type AuthStatusPayload = {
   needsSetup?: boolean;
+  totpRequired?: boolean;
 };
 
 type AuthUserPayload = {
@@ -46,7 +47,7 @@ type OnboardingStatusPayload = {
 };
 
 type ApiErrorPayload = {
-  error?: string;
+  error?: string | { code?: string; message?: string };
   message?: string;
 };
 
@@ -55,9 +56,10 @@ type AuthContextValue = {
   token: string | null;
   isLoading: boolean;
   needsSetup: boolean;
+  totpRequired: boolean;
   hasCompletedOnboarding: boolean;
   error: string | null;
-  login: (username: string, password: string) => Promise<AuthActionResult>;
+  login: (username: string, password: string, code?: string) => Promise<AuthActionResult>;
   register: (username: string, password: string) => Promise<AuthActionResult>;
   logout: () => void;
   refreshOnboardingStatus: () => Promise<void>;
@@ -80,7 +82,9 @@ function resolveApiErrorMessage(payload: ApiErrorPayload | null, fallback: strin
     return fallback;
   }
 
-  return payload.error ?? payload.message ?? fallback;
+  // The server's global error handler returns `error` as `{ code, message }`.
+  const error = typeof payload.error === 'object' ? payload.error?.message : payload.error;
+  return error ?? payload.message ?? fallback;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -111,6 +115,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [token, setToken] = useState<string | null>(() => readStoredToken());
   const [isLoading, setIsLoading] = useState(true);
   const [needsSetup, setNeedsSetup] = useState(false);
+  const [totpRequired, setTotpRequired] = useState(false);
   const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -212,6 +217,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
       const statusResponse = await api.auth.status();
       const statusPayload = await parseJsonSafely<AuthStatusPayload>(statusResponse);
+      setTotpRequired(Boolean(statusPayload?.totpRequired));
 
       if (statusPayload?.needsSetup) {
         setNeedsSetup(true);
@@ -294,10 +300,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }, [refreshSession, token, user]);
 
   const login = useCallback<AuthContextValue['login']>(
-    async (username, password) => {
+    async (username, password, code) => {
       try {
         setError(null);
-        const response = await api.auth.login(username, password);
+        const response = await api.auth.login(username, password, code);
         const payload = await parseJsonSafely<AuthSessionPayload>(response);
 
         if (!response.ok || !payload?.token || !payload.user) {
@@ -357,6 +363,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       token,
       isLoading,
       needsSetup,
+      totpRequired,
       hasCompletedOnboarding,
       error,
       login,
@@ -374,6 +381,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       refreshOnboardingStatus,
       register,
       token,
+      totpRequired,
       user,
     ],
   );

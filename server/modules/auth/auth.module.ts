@@ -5,6 +5,7 @@ import { getConnection, userDb } from '@/modules/database/index.js';
 import { authenticateToken, generateToken } from './auth.middleware.js';
 import { createAuthRouter } from './auth.routes.js';
 import { createAuthService } from './auth.service.js';
+import { createTotpVerifier } from './totp.js';
 
 type BcryptAdapter = {
   hash(password: string, saltRounds: number): Promise<string>;
@@ -32,6 +33,8 @@ const authService = createAuthService({
   hashPassword: (password) => bcrypt.hash(password, 12),
   comparePassword: (password, passwordHash) => bcrypt.compare(password, passwordHash),
   generateToken,
+  // Optional second factor: set TOTP_SECRET (Base32) in .env to require an authenticator code.
+  verifyTotp: process.env.TOTP_SECRET?.trim() ? createTotpVerifier(process.env.TOTP_SECRET) : undefined,
 });
 
 /** Auth router assembled for the server entrypoint. */

@@ -22,6 +22,8 @@ type AuthDependencies = {
   hashPassword(password: string): Promise<string>;
   comparePassword(password: string, passwordHash: string): Promise<boolean>;
   generateToken(user: AuthUser): string;
+  /** When provided, login also requires a valid authenticator (TOTP) code. */
+  verifyTotp?: (code: string) => boolean;
 };
 
 function numericUserId(userId: number | bigint): number {
@@ -45,6 +47,7 @@ export function createAuthService(dependencies: AuthDependencies) {
       return {
         needsSetup: !dependencies.users.hasUsers(),
         isAuthenticated: false,
+        totpRequired: Boolean(dependencies.verifyTotp),
       };
     },
 
@@ -97,9 +100,10 @@ export function createAuthService(dependencies: AuthDependencies) {
       }
     },
 
-    async login(usernameInput: unknown, passwordInput: unknown) {
+    async login(usernameInput: unknown, passwordInput: unknown, codeInput?: unknown) {
       const username = typeof usernameInput === 'string' ? usernameInput : '';
       const password = typeof passwordInput === 'string' ? passwordInput : '';
+      const code = typeof codeInput === 'string' ? codeInput.trim() : '';
       if (!username || !password) {
         throw new AppError('Username and password are required', {
           code: 'AUTH_CREDENTIALS_REQUIRED',
@@ -111,11 +115,15 @@ export function createAuthService(dependencies: AuthDependencies) {
       const validPassword = user
         ? await dependencies.comparePassword(password, user.password_hash)
         : false;
-      if (!user || !validPassword) {
-        throw new AppError('Invalid username or password', {
-          code: 'AUTH_INVALID_CREDENTIALS',
-          statusCode: 401,
-        });
+      // The code is only checked (and consumed) once the password is correct,
+      // and failures share one message so callers cannot tell which part was wrong.
+      if (!user || !validPassword || (dependencies.verifyTotp && !dependencies.verifyTotp(code))) {
+        throw new AppError(
+          dependencies.verifyTotp
+            ? 'Invalid username, password or verification code'
+            : 'Invalid username or password',
+          { code: 'AUTH_INVALID_CREDENTIALS', statusCode: 401 },
+        );
       }
 
       dependencies.users.updateLastLogin(numericUserId(user.id));

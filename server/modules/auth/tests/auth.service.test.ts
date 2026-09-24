@@ -79,6 +79,34 @@ test('login rejects an invalid password without issuing a token', async () => {
   assert.equal(tokenIssued, false);
 });
 
+test('login requires a valid verification code when TOTP is enabled', async () => {
+  const checkedCodes: string[] = [];
+  const service = createAuthService(createDependencies({
+    users: {
+      hasUsers: () => true,
+      createUser: () => { throw new Error('unused'); },
+      getUserByUsername: () => ({ id: 1, username: 'alice', password_hash: 'hash' }),
+      updateLastLogin: () => undefined,
+    },
+    comparePassword: async (password) => password === 'right-password',
+    verifyTotp: (code) => {
+      checkedCodes.push(code);
+      return code === '123456';
+    },
+  }));
+  const isInvalidCredentials = (error: unknown) => error instanceof AppError && error.code === 'AUTH_INVALID_CREDENTIALS';
+
+  assert.equal(service.getStatus().totpRequired, true);
+  await assert.rejects(service.login('alice', 'right-password'), isInvalidCredentials);
+  await assert.rejects(service.login('alice', 'right-password', '654321'), isInvalidCredentials);
+  // A wrong password must not consume the code.
+  await assert.rejects(service.login('alice', 'wrong-password', '123456'), isInvalidCredentials);
+  const result = await service.login('alice', 'right-password', ' 123456 ');
+
+  assert.equal(result.token, 'signed-token');
+  assert.deepEqual(checkedCodes, ['', '654321', '123456']);
+});
+
 test('refreshSession issues a replacement token for the authenticated user', () => {
   let tokenUser: { id: number | bigint; username: string } | undefined;
   const service = createAuthService(createDependencies({

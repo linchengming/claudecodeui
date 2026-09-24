@@ -5,6 +5,7 @@ import fs, { promises as fsPromises } from 'fs';
 import path from 'path';
 import os from 'os';
 import http from 'http';
+import https from 'https';
 
 import express, { type NextFunction, type Request, type Response } from 'express';
 import cors from 'cors';
@@ -82,7 +83,13 @@ const systemRoutes = createSystemModule({
 console.log('SERVER_PORT from env:', process.env.SERVER_PORT);
 
 const app = express();
-const server = http.createServer(app);
+const SSL_KEY_FILE = process.env.SSL_KEY_FILE;
+const SSL_CERT_FILE = process.env.SSL_CERT_FILE;
+const USE_HTTPS = Boolean(SSL_KEY_FILE && SSL_CERT_FILE);
+const PROTOCOL = USE_HTTPS ? 'https' : 'http';
+const server = USE_HTTPS
+    ? https.createServer({ key: fs.readFileSync(SSL_KEY_FILE!), cert: fs.readFileSync(SSL_CERT_FILE!) }, app)
+    : http.createServer(app);
 const queryClaude = providerRuntimeService.getRunner('claude');
 const queryCursor = providerRuntimeService.getRunner('cursor');
 const queryCodex = providerRuntimeService.getRunner('codex');
@@ -300,7 +307,7 @@ async function writeLocalServerMarker() {
         pid: process.pid,
         host: HOST,
         port: Number.parseInt(String(SERVER_PORT), 10),
-        url: `http://${DISPLAY_HOST}:${SERVER_PORT}`,
+        url: `${PROTOCOL}://${DISPLAY_HOST}:${SERVER_PORT}`,
         installMode,
         appRoot: APP_ROOT,
         updatedAt: new Date().toISOString(),
@@ -346,7 +353,7 @@ async function startServer() {
         console.log('');
 
         if (isProduction) {
-            console.log(`${terminalTextStyles.info('[INFO]')} To run in production mode, go to http://${DISPLAY_HOST}:${SERVER_PORT}`);
+            console.log(`${terminalTextStyles.info('[INFO]')} To run in production mode, go to ${PROTOCOL}://${DISPLAY_HOST}:${SERVER_PORT}`);
         }
 
         console.log(`${terminalTextStyles.info('[INFO]')} To run in development mode with hot-module replacement, go to http://${DISPLAY_HOST}:${VITE_PORT}`);
@@ -362,7 +369,7 @@ async function startServer() {
             console.log(`  ${terminalTextStyles.bright('CloudCLI Server - Ready')}`);
             console.log(terminalTextStyles.dim('═'.repeat(63)));
             console.log('');
-            console.log(`${terminalTextStyles.info('[INFO]')} Server URL:  ${terminalTextStyles.bright('http://' + DISPLAY_HOST + ':' + SERVER_PORT)}`);
+            console.log(`${terminalTextStyles.info('[INFO]')} Server URL:  ${terminalTextStyles.bright(`${PROTOCOL}://${DISPLAY_HOST}:${SERVER_PORT}`)}`);
             console.log(`${terminalTextStyles.info('[INFO]')} Installed at: ${terminalTextStyles.dim(appInstallPath)}`);
             console.log(`${terminalTextStyles.tip('[TIP]')}  Run "cloudcli status" for full configuration details`);
             console.log('');

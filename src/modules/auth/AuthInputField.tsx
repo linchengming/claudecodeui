@@ -13,6 +13,7 @@ type AuthInputFieldProps = {
   type?: 'text' | 'password' | 'email';
   name?: string;
   autoComplete?: string;
+  inputMode?: 'text' | 'numeric';
   icon?: ComponentType<{ className?: string }>;
 };
 
@@ -33,6 +34,7 @@ export default function AuthInputField({
   type = 'text',
   name,
   autoComplete,
+  inputMode,
   icon: Icon,
 }: AuthInputFieldProps) {
   const { t } = useTranslation('auth');
@@ -55,6 +57,7 @@ export default function AuthInputField({
           type={resolvedType}
           name={name ?? id}
           autoComplete={autoComplete}
+          inputMode={inputMode}
           value={value}
           onChange={(event) => onChange(event.target.value)}
           className={`w-full rounded-xl border border-border bg-background/60 py-2.5 text-foreground shadow-sm transition-colors placeholder:text-muted-foreground/60 hover:border-foreground/20 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:cursor-not-allowed disabled:opacity-60 ${

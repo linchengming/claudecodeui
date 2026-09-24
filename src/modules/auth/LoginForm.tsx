@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Loader2, Lock, User } from 'lucide-react';
+import { KeyRound, Loader2, Lock, User } from 'lucide-react';
 
 import { useAuth } from '@/modules/auth/context/AuthContext';
 import AuthErrorAlert from '@/modules/auth/AuthErrorAlert';
@@ -11,11 +11,13 @@ import AuthScreenLayout from '@/modules/auth/AuthScreenLayout';
 type LoginFormState = {
   username: string;
   password: string;
+  code: string;
 };
 
 const initialState: LoginFormState = {
   username: '',
   password: '',
+  code: '',
 };
 
 /**
@@ -26,7 +28,7 @@ const initialState: LoginFormState = {
  */
 export default function LoginForm() {
   const { t } = useTranslation('auth');
-  const { error: sessionError, login } = useAuth();
+  const { error: sessionError, login, totpRequired } = useAuth();
 
   const [formState, setFormState] = useState<LoginFormState>(initialState);
   const [errorMessage, setErrorMessage] = useState('');
@@ -42,19 +44,25 @@ export default function LoginForm() {
       setErrorMessage('');
 
       // Keep form validation local so each auth screen owns its own UI feedback.
-      if (!formState.username.trim() || !formState.password) {
+      if (!formState.username.trim() || !formState.password || (totpRequired && !formState.code.trim())) {
         setErrorMessage(t('login.errors.requiredFields'));
         return;
       }
 
       setIsSubmitting(true);
-      const result = await login(formState.username.trim(), formState.password);
+      const result = await login(
+        formState.username.trim(),
+        formState.password,
+        totpRequired ? formState.code.trim() : undefined,
+      );
       if (!result.success) {
         setErrorMessage(result.error);
+        // Each code is single-use, so clear it for the next attempt.
+        setFormState((previous) => ({ ...previous, code: '' }));
       }
       setIsSubmitting(false);
     },
-    [formState.password, formState.username, login, t],
+    [formState.code, formState.password, formState.username, login, t, totpRequired],
   );
 
   return (
@@ -86,6 +94,20 @@ export default function LoginForm() {
           autoComplete="current-password"
           icon={Lock}
         />
+
+        {totpRequired && (
+          <AuthInputField
+            id="code"
+            label={t('login.totpCode')}
+            value={formState.code}
+            onChange={(value) => updateField('code', value.replace(/\D/g, '').slice(0, 6))}
+            placeholder={t('login.placeholders.totpCode')}
+            isDisabled={isSubmitting}
+            autoComplete="one-time-code"
+            inputMode="numeric"
+            icon={KeyRound}
+          />
+        )}
 
         <AuthErrorAlert errorMessage={errorMessage || sessionError || ''} />
 

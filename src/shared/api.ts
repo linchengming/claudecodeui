@@ -160,10 +160,10 @@ export const api = {
   // Auth endpoints (no token required)
   auth: {
     status: () => fetch('/api/auth/status'),
-    login: (username: string, password: string) => fetch('/api/auth/login', {
+    login: (username: string, password: string, code?: string) => fetch('/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password }),
+      body: JSON.stringify({ username, password, code }),
     }),
     register: (username: string, password: string) => fetch('/api/auth/register', {
       method: 'POST',
