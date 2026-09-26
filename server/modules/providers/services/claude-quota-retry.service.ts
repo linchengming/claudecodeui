@@ -7,7 +7,7 @@ import { createCompleteMessage, createNormalizedMessage, readObjectRecord } from
 const DEFAULT_INTERVAL_MS = 5 * 60 * 1000;
 const RESET_GRACE_MS = 5000;
 // Match API errors only, never ordinary assistant prose or tool output.
-const QUOTA_ERROR = /rate[_ -]?limit|too many requests|\b429\b|insufficient[_ -]?quota|quota.{0,60}(?:exceed|exhaust|insufficient)|(?:usage|spending|session|weekly|five.hour|5.hour) limit|(?:hit|reached|exceeded) your limit|(?:额度|配额).{0,20}(?:不足|耗尽|用完|超|限制)|限流/i;
+const QUOTA_ERROR = /rate[_ -]?limit|too many requests|\b429\b|insufficient[_ -]?quota|quota.{0,60}(?:exceed|exhaust|insufficient)|(?:usage|spending|session|weekly|five.hour|5.hour) limit|(?:hit|reached|exceeded) your limit|(?:额度|配额).{0,20}(?:不足|耗尽|用完|超|限制)|限流|no available accounts/i;
 
 function errorText(value: unknown): string {
   if (typeof value === 'string') return value;
