@@ -18,7 +18,8 @@ import { readUserPreference, writeUserPreference } from '@/shared/userSettings';
 
 const PROVIDERS: LLMProvider[] = ['claude', 'cursor', 'codex', 'opencode'];
 
-const DEFAULT_PROVIDER: LLMProvider = 'claude';
+// Codex is the default assistant so a new session starts with GPT-5.6 Sol.
+const DEFAULT_PROVIDER: LLMProvider = 'codex';
 
 export function readSelectedProvider(): LLMProvider {
   const stored = readUserPreference<string | null>('selectedProvider', null);

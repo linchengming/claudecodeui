@@ -19,8 +19,8 @@ beforeEach(() => {
   resetUserPreferences();
 });
 
-test('an unset provider falls back to claude', () => {
-  assert.equal(readSelectedProvider(), 'claude');
+test('an unset provider falls back to Codex', () => {
+  assert.equal(readSelectedProvider(), 'codex');
 });
 
 test('a stored provider is read back', () => {
@@ -31,7 +31,7 @@ test('a stored provider is read back', () => {
 test('a value that is not a known provider falls back instead of being trusted', () => {
   // Only one of the previous readers validated; the rest returned this verbatim.
   writeUserPreference('selectedProvider', 'not-a-provider');
-  assert.equal(readSelectedProvider(), 'claude');
+  assert.equal(readSelectedProvider(), 'codex');
 });
 
 test('a write publishes a same-tab change, which the storage event does not', () => {
