@@ -257,10 +257,6 @@ async function spawnOpenCode(command, options = {}, ws, context) {
 
       const resolvedEffort = resolveOpenCodeEffort(resolvedModel, effort, effortModels);
       const args = ['run', '--format', 'json'];
-      // OpenCode's `run` command owns workspace selection through `--dir`.
-      // Relying on the child-process cwd alone is not enough on Linux, where
-      // the CLI can still resolve the session under the server install dir.
-      args.push('--dir', workingDir);
       if (providerSessionId) {
         args.push('--session', providerSessionId);
       }
@@ -276,16 +272,13 @@ async function spawnOpenCode(command, options = {}, ws, context) {
         normalizeAttachmentDescriptors(images).length > 0
         || normalizeAttachmentDescriptors(files).length > 0;
       if ((command && command.trim()) || hasAttachments) {
-        // Image attachments ride along as an <images_input> path list appended
-        // to the prompt; the session history reader strips the tag back out.
-        // opencode is a .cmd shim on Windows, so the whole argument must be
-        // newline-free or cmd.exe silently truncates it at the first newline.
         const promptWithAttachments = appendFilesInputTag(
           appendImagesInputTag(command?.trim() || '', images),
           files
         );
         args.push(flattenPromptForWindowsShell(promptWithAttachments));
       }
+      args.push(workingDir);
 
       opencodeProcess = spawnFunction('opencode', args, {
         cwd: workingDir,
