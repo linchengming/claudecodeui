@@ -131,6 +131,34 @@ test('Stop cancels waiting immediately without launching another CLI', async () 
   assert.equal(h.service.cancel('session-1'), false);
 });
 
+test('first assistant reply after a retry reports recovery once, without a quotaRetry marker', async () => {
+  const h = harness();
+  let attempts = 0;
+  await h.service.run(runtime(async (_command, _options, writer, context) => {
+    if (++attempts === 1) {
+      quotaFailure(context, writer);
+      return;
+    }
+    context.normalizeMessage({ type: 'assistant', message: { content: [{ type: 'text', text: 'resuming' }] } }, 'native-1');
+    context.normalizeMessage({ type: 'assistant', message: { content: [{ type: 'text', text: 'still going' }] } }, 'native-1');
+    context.normalizeMessage({ type: 'result', is_error: false, result: 'done' }, 'native-1');
+    writer.send({ kind: 'complete', exitCode: 0 });
+  }), 'task', h.options, h.writer, h.context);
+  const statuses = h.events.filter((event) => event.kind === 'status');
+  const recovered = statuses.filter((event) => /额度已恢复/.test(event.text));
+  assert.equal(recovered.length, 1);
+  assert.equal(recovered[0].quotaRetry, undefined);
+  assert.match(recovered[0].text, /第 1 次重试成功/);
+  assert.ok(statuses.indexOf(recovered[0]) > statuses.findIndex((event) => /正在重试额度/.test(event.text)));
+  // Runs that never hit the quota must not announce a recovery.
+  const clean = harness();
+  await clean.service.run(runtime(async (_command, _options, writer, context) => {
+    context.normalizeMessage({ type: 'assistant', message: { content: [{ type: 'text', text: 'hi' }] } }, 'native-1');
+    writer.send({ kind: 'complete', exitCode: 0 });
+  }), 'task', clean.options, clean.writer, clean.context);
+  assert.equal(clean.events.filter((event) => event.kind === 'status').length, 0);
+});
+
 test('quota messages in normal replies and tool failures do not replay completed work', async () => {
   const h = harness();
   let attempts = 0;

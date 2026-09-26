@@ -81,12 +81,18 @@ export function createClaudeQuotaRetryService(overrides: Partial<typeof defaultD
         provider: 'claude', sessionId, kind: 'status', text, canInterrupt: true,
         quotaRetry: { attempt: retryCount, retryAt: retryAt ? new Date(retryAt).toISOString() : null },
       }));
+      // No quotaRetry field: the client drops its retry badge on this status.
+      const recovered = () => writer.send(createNormalizedMessage({
+        provider: 'claude', sessionId, kind: 'status', canInterrupt: true,
+        text: `额度已恢复，继续执行（第 ${retryCount} 次重试成功）`,
+      }));
 
       try {
         while (!controller.signal.aborted) {
           let quotaFailure = false;
           let resetsAt: number | null = null;
           let terminalForwarded = false;
+          let recoveryReported = retryCount === 0;
           let result: unknown;
           let thrown: unknown;
           let didThrow = false;
@@ -118,6 +124,10 @@ export function createClaudeQuotaRetryService(overrides: Partial<typeof defaultD
                   // transient quota event internally. Never retry that success.
                   quotaFailure = false;
                   originalRequestRecorded = true;
+                  if (!recoveryReported) {
+                    recoveryReported = true;
+                    recovered();
+                  }
                 } else if (event.type === 'result') {
                   if (event.is_error) {
                     const details = errorText(event.errors) || errorText(event.result);
