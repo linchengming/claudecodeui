@@ -136,3 +136,39 @@ test('routes permission decisions through provider-owned runtime capabilities', 
     { requestId: 'request-1', sessionId: 'session-1' },
   ]);
 });
+
+test('abort cancels a Claude quota wait even after its CLI has already exited', async () => {
+  const previous = process.env.CLOUDCLI_QUOTA_RETRY;
+  process.env.CLOUDCLI_QUOTA_RETRY = 'true';
+  let notifyWaiting!: () => void;
+  const waiting = new Promise<void>((resolve) => { notifyWaiting = resolve; });
+  const calls: string[] = [];
+  const provider = createProvider('claude', createRuntime({
+    async run(_command, _options, writer) {
+      calls.push('run');
+      writer.send({ kind: 'error', content: 'usage limit reached' });
+      writer.send({ kind: 'complete', exitCode: 1 });
+    },
+    abort() { calls.push('abort'); return false; },
+  }));
+  const service = createService([provider]);
+  const sent: Array<Record<string, unknown>> = [];
+  try {
+    const running = service.run('claude', 'task', { sessionId: 'session-1' }, {
+      send(message: unknown) {
+        const event = message as Record<string, unknown>;
+        sent.push(event);
+        if (event.quotaRetry) notifyWaiting();
+      },
+    });
+    await waiting;
+    assert.equal(sent.some((event) => event.kind === 'complete'), false);
+    assert.equal(await service.abort('claude', 'session-1'), true);
+    await running;
+    assert.deepEqual(calls, ['run', 'abort']);
+    assert.equal(sent.at(-1)?.aborted, true);
+  } finally {
+    if (previous === undefined) delete process.env.CLOUDCLI_QUOTA_RETRY;
+    else process.env.CLOUDCLI_QUOTA_RETRY = previous;
+  }
+});

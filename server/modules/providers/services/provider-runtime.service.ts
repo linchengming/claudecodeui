@@ -1,6 +1,7 @@
 import { providerRegistry } from '@/modules/providers/provider.registry.js';
 import { providerModelsService } from '@/modules/providers/services/provider-models.service.js';
 import { sessionsService } from '@/modules/providers/services/sessions.service.js';
+import { createClaudeQuotaRetryService } from '@/modules/providers/services/claude-quota-retry.service.js';
 import type { IProvider } from '@/shared/interfaces.js';
 import type {
   AnyRecord,
@@ -43,6 +44,7 @@ export function createProviderRuntimeService(
   dependencyOverrides: Partial<ProviderRuntimeServiceDependencies> = {},
 ) {
   const dependencies = { ...defaultDependencies, ...dependencyOverrides };
+  const quotaRetry = createClaudeQuotaRetryService();
 
   const createRuntimeContext = (
     provider: IProvider,
@@ -69,6 +71,9 @@ export function createProviderRuntimeService(
     writer: ProviderRuntimeWriter,
   ): Promise<unknown> => {
     const provider = dependencies.resolveProvider(providerName);
+    if (providerName === 'claude') {
+      return quotaRetry.run(provider.runtime, command, options, writer, createRuntimeContext(provider));
+    }
     return provider.runtime.run(command, options, writer, createRuntimeContext(provider));
   };
 
@@ -88,7 +93,9 @@ export function createProviderRuntimeService(
     },
 
     async abort(providerName: LLMProvider, sessionId: string): Promise<boolean> {
-      return Boolean(await dependencies.resolveProvider(providerName).runtime.abort(sessionId));
+      const cancelledRetry = providerName === 'claude' && quotaRetry.cancel(sessionId);
+      const abortedRuntime = await dependencies.resolveProvider(providerName).runtime.abort(sessionId);
+      return cancelledRetry || Boolean(abortedRuntime);
     },
 
     async stopBackgroundTask(providerName: LLMProvider, sessionId: string, taskId: string): Promise<boolean> {

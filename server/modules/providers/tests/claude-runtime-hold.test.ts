@@ -32,11 +32,13 @@ type Scripted = {
 };
 
 /** A stand-in for the SDK query: yields what the test emits, and reads the held prompt to notice its release. */
-function createScriptedQuery(): { createQuery: NonNullable<ProviderRuntimeContext['createQuery']>; script: Scripted } {
+function createScriptedQuery(): { createQuery: NonNullable<ProviderRuntimeContext['createQuery']>; script: Scripted; ready: Promise<void> } {
   const queue: Array<Record<string, unknown> | null> = [];
   let wake: (() => void) | null = null;
   let released = false;
   const stopped: string[] = [];
+  let markReady!: () => void;
+  const ready = new Promise<void>((resolve) => { markReady = resolve; });
 
   const script: Scripted = {
     emit: (message) => { queue.push(message); wake?.(); },
@@ -46,6 +48,7 @@ function createScriptedQuery(): { createQuery: NonNullable<ProviderRuntimeContex
   };
 
   const createQuery: NonNullable<ProviderRuntimeContext['createQuery']> = ({ prompt }) => {
+    markReady();
     void (async () => {
       for await (const _message of prompt) { /* the CLI reads its stdin */ }
       released = true;
@@ -72,14 +75,14 @@ function createScriptedQuery(): { createQuery: NonNullable<ProviderRuntimeContex
     });
   };
 
-  return { createQuery, script };
+  return { createQuery, script, ready };
 }
 
 async function withRun(
   runTest: (context: { script: Scripted; sent: NormalizedMessage[]; done: Promise<unknown> }) => Promise<void>,
 ): Promise<void> {
   const cwd = await mkdtemp(path.join(os.tmpdir(), 'claude-runtime-hold-'));
-  const { createQuery, script } = createScriptedQuery();
+  const { createQuery, script, ready } = createScriptedQuery();
   const sent: NormalizedMessage[] = [];
   const writer = { send: (message: NormalizedMessage) => { sent.push(message); }, userId: null };
   const sessions = new ClaudeSessionsProvider({ getLiveRunStartTime: () => null });
@@ -94,6 +97,9 @@ async function withRun(
 
   try {
     const done = queryClaudeSDK('hello', { sessionId: SESSION_ID, cwd }, writer as never, context);
+    // Model/config filesystem reads can exceed the event-settling delay on
+    // Windows. Drive the SDK only once initialization has actually finished.
+    await ready;
     await runTest({ script, sent, done });
     script.end();
     await done;
