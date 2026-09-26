@@ -74,6 +74,9 @@ export function useSessionProtection() {
       // its own clock: the stale idle-ack guard compares against it, and the
       // tasks' start is not when this response began.
       const continuing = existing && !existing.background ? existing : undefined;
+      // A status update replaces the retry state (absent = cleared); a bare
+      // processing mark keeps whatever retry is in progress.
+      const quotaRetry = activity ? activity.quotaRetry : continuing?.quotaRetry;
       const next: SessionActivity = {
         statusText:
           activity?.statusText !== undefined ? activity.statusText : continuing?.statusText ?? null,
@@ -82,12 +85,15 @@ export function useSessionProtection() {
         // The tasks keep running under the new turn; they are reported again
         // when it ends.
         ...(existing?.tasks ? { tasks: existing.tasks } : {}),
+        ...(quotaRetry ? { quotaRetry } : {}),
       };
 
       if (
         continuing
         && continuing.statusText === next.statusText
         && continuing.canInterrupt === next.canInterrupt
+        && continuing.quotaRetry?.attempt === next.quotaRetry?.attempt
+        && continuing.quotaRetry?.retryAt === next.quotaRetry?.retryAt
       ) {
         return prev;
       }

@@ -364,6 +364,7 @@ export function useChatRealtimeHandlers({
             onSessionProcessing?.(sid, {
               statusText: msg.text as string,
               canInterrupt: msg.canInterrupt !== false,
+              quotaRetry: msg.quotaRetry as { attempt: number; retryAt: string | null } | undefined,
             });
           }
           break;

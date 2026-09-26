@@ -51,6 +51,7 @@ export default function ActivityIndicator({ activity, onAbort, isInputFocused = 
   const [isExiting, setIsExiting] = useState(false);
   const startedAt = renderedActivity?.startedAt ?? null;
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [retryCountdown, setRetryCountdown] = useState<number | null>(null);
 
   useEffect(() => {
     if (activity) {
@@ -78,9 +79,25 @@ export default function ActivityIndicator({ activity, onAbort, isInputFocused = 
     return () => clearInterval(timer);
   }, [startedAt]);
 
+  useEffect(() => {
+    const retryAt = renderedActivity?.quotaRetry?.retryAt;
+    if (!retryAt) {
+      setRetryCountdown(null);
+      return;
+    }
+    const update = () => {
+      const seconds = Math.max(0, Math.floor((new Date(retryAt).getTime() - Date.now()) / 1000));
+      setRetryCountdown(seconds);
+    };
+    update();
+    const timer = setInterval(update, 1000);
+    return () => clearInterval(timer);
+  }, [renderedActivity?.quotaRetry?.retryAt]);
+
   if (!renderedActivity) return null;
 
   const isBackground = Boolean(renderedActivity.background);
+  const isQuotaRetry = Boolean(renderedActivity.quotaRetry);
   const actionWords = ACTION_KEYS.map((key, i) => t(key, { defaultValue: DEFAULT_ACTION_WORDS[i] }));
   const label = isBackground
     ? t('claudeStatus.backgroundWork', 'Background work')
@@ -93,6 +110,16 @@ export default function ActivityIndicator({ activity, onAbort, isInputFocused = 
   const elapsedLabel = minutes < 1
     ? t('claudeStatus.elapsed.seconds', { count: seconds, defaultValue: '{{count}}s' })
     : t('claudeStatus.elapsed.minutesSeconds', { minutes, seconds, defaultValue: '{{minutes}}m {{seconds}}s' });
+
+  let timeDisplay = elapsedLabel;
+  if (isQuotaRetry && retryCountdown !== null) {
+    const retryMinutes = Math.floor(retryCountdown / 60);
+    const retrySeconds = retryCountdown % 60;
+    timeDisplay = retryMinutes < 1
+      ? `${retrySeconds}秒后重试`
+      : `${retryMinutes}:${retrySeconds.toString().padStart(2, '0')} 后重试`;
+  }
+
   const tabSurfaceClassName = [
     'chat-activity-tab inline-flex h-8 items-center rounded-b-none rounded-t-lg border border-b-0 bg-card px-3 text-xs transition-all duration-200',
     isInputFocused
@@ -110,7 +137,7 @@ export default function ActivityIndicator({ activity, onAbort, isInputFocused = 
         <div className={`${tabSurfaceClassName} min-w-0 max-w-full gap-2`}>
           <span
             className={`h-1.5 w-1.5 shrink-0 animate-pulse rounded-full ${
-              isBackground ? 'bg-purple-500 dark:bg-purple-400' : 'bg-primary'
+              isBackground ? 'bg-purple-500 dark:bg-purple-400' : isQuotaRetry ? 'bg-amber-500' : 'bg-primary'
             }`}
             aria-hidden
           />
@@ -118,7 +145,17 @@ export default function ActivityIndicator({ activity, onAbort, isInputFocused = 
           {detail && (
             <span className="min-w-0 truncate text-muted-foreground" title={detail}>{detail}</span>
           )}
-          <span className="shrink-0 tabular-nums text-muted-foreground/60">{elapsedLabel}</span>
+          {isQuotaRetry && (
+            <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] text-amber-800 dark:bg-amber-950 dark:text-amber-200">
+              <svg className="h-2.5 w-2.5 animate-spin" viewBox="0 0 24 24" aria-hidden>
+                <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" strokeWidth="2" strokeDasharray="15.7 31.4" />
+              </svg>
+              {timeDisplay}
+            </span>
+          )}
+          {!isQuotaRetry && (
+            <span className="shrink-0 tabular-nums text-muted-foreground/60">{elapsedLabel}</span>
+          )}
         </div>
 
         {renderedActivity.canInterrupt && onAbort && (

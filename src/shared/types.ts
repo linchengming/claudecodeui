@@ -190,6 +190,11 @@ export type SessionActivity = {
   background?: boolean;
   /** The background tasks the session still has running, with or without a response in flight. */
   tasks?: BackgroundTaskSummary[];
+  /** Quota retry state when waiting for Claude API rate limit to reset. */
+  quotaRetry?: {
+    attempt: number;
+    retryAt: string | null;
+  };
 };
 
 /** Every busy session, keyed by session id. Read it to tell whether a session is busy; check `background` to tell how. */
@@ -198,7 +203,11 @@ export type SessionActivityMap = ReadonlyMap<string, SessionActivity>;
 /** Marks a session as producing a response; call it as soon as a send is dispatched so the UI reacts immediately. */
 export type MarkSessionProcessing = (
   sessionId?: string | null,
-  activity?: { statusText?: string | null; canInterrupt?: boolean },
+  activity?: {
+    statusText?: string | null;
+    canInterrupt?: boolean;
+    quotaRetry?: { attempt: number; retryAt: string | null };
+  },
 ) => void;
 
 /** Marks a session's response as finished; `ifStartedBefore` lets a late acknowledgement clear only a stale run. Leaves background-only work alone, which it says nothing about. */
@@ -581,6 +590,11 @@ export type NormalizedMessage = {
   outputFile?: string;
   /** A workflow's `progress` only: where each agent the run spawned stands. */
   agents?: WorkflowAgentProgress[];
+  /** Quota retry state for Claude API rate limit errors, sent by the quota retry service. */
+  quotaRetry?: {
+    attempt: number;
+    retryAt: string | null;
+  };
 };
 
 /** What a background task has spent so far — tokens, tool calls and wall time — as the CLI reports it while the task runs and when it ends. */
