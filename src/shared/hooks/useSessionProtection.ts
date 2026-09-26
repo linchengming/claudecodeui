@@ -201,6 +201,8 @@ export function useSessionProtection() {
           startedAt: snapshotStartedAt ?? existing?.startedAt ?? now,
           ...(snapshot.background ? { background: true } : {}),
           ...(snapshot.tasks ? { tasks: snapshot.tasks } : {}),
+          // The poll knows nothing about quota retries; only status events do.
+          ...(existing?.quotaRetry && !snapshot.background ? { quotaRetry: existing.quotaRetry } : {}),
         });
       }
 
