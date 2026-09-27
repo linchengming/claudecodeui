@@ -154,3 +154,7 @@ server/**/tests/file-tree-outside-*/
 
 # Device certificates for mTLS: private keys and bundles must never be committed
 client-certs/
+# The installer script carries no key material, so it stays versioned
+!client-certs/
+client-certs/*
+!client-certs/安装证书.bat
