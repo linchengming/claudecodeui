@@ -85,10 +85,28 @@ console.log('SERVER_PORT from env:', process.env.SERVER_PORT);
 const app = express();
 const SSL_KEY_FILE = process.env.SSL_KEY_FILE;
 const SSL_CERT_FILE = process.env.SSL_CERT_FILE;
+const SSL_CLIENT_CA_FILE = process.env.SSL_CLIENT_CA_FILE;
 const USE_HTTPS = Boolean(SSL_KEY_FILE && SSL_CERT_FILE);
+const USE_MTLS = Boolean(USE_HTTPS && SSL_CLIENT_CA_FILE);
 const PROTOCOL = USE_HTTPS ? 'https' : 'http';
 const server = USE_HTTPS
-    ? https.createServer({ key: fs.readFileSync(SSL_KEY_FILE!), cert: fs.readFileSync(SSL_CERT_FILE!) }, app)
+    ? https.createServer(
+        {
+            key: fs.readFileSync(SSL_KEY_FILE!),
+            cert: fs.readFileSync(SSL_CERT_FILE!),
+            // Device certificate gate: the TLS handshake itself rejects clients
+            // without a certificate signed by this CA, before any HTTP or
+            // WebSocket handling runs.
+            ...(USE_MTLS
+                ? {
+                    ca: fs.readFileSync(SSL_CLIENT_CA_FILE!),
+                    requestCert: true,
+                    rejectUnauthorized: true,
+                }
+                : {}),
+        },
+        app
+    )
     : http.createServer(app);
 const queryClaude = providerRuntimeService.getRunner('claude');
 const queryCursor = providerRuntimeService.getRunner('cursor');
@@ -371,6 +389,9 @@ async function startServer() {
             console.log('');
             console.log(`${terminalTextStyles.info('[INFO]')} Server URL:  ${terminalTextStyles.bright(`${PROTOCOL}://${DISPLAY_HOST}:${SERVER_PORT}`)}`);
             console.log(`${terminalTextStyles.info('[INFO]')} Installed at: ${terminalTextStyles.dim(appInstallPath)}`);
+            if (USE_MTLS) {
+                console.log(`${terminalTextStyles.info('[INFO]')} Client certificate required (CA: ${terminalTextStyles.dim(SSL_CLIENT_CA_FILE!)})`);
+            }
             console.log(`${terminalTextStyles.tip('[TIP]')}  Run "cloudcli status" for full configuration details`);
             console.log('');
 
