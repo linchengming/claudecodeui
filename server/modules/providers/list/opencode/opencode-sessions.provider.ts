@@ -211,8 +211,13 @@ export class OpenCodeSessionsProvider implements IProviderSessions {
     const type = readOptionalString(raw.type) ?? readOptionalString(raw.event);
     const eventSessionId = readOptionalString(raw.sessionID) ?? readOptionalString(raw.sessionId) ?? sessionId;
     const timestamp = normalizeProviderTimestamp(raw.time ?? raw.timestamp);
+    // OpenCode 2.x carries every event payload on `part`; 1.x put the same
+    // fields at the top level, so both shapes have to resolve.
+    const part = readObjectRecord(raw.part) ?? {};
     const baseId = readOptionalString(raw.id)
       ?? readOptionalString(raw.messageID)
+      ?? readOptionalString(part.id)
+      ?? readOptionalString(part.messageID)
       ?? generateMessageId('opencode');
 
     if (type === 'text') {
@@ -222,7 +227,7 @@ export class OpenCodeSessionsProvider implements IProviderSessions {
         return [];
       }
 
-      const content = extractText(raw.text ?? raw.delta ?? raw.message);
+      const content = extractText(raw.text ?? raw.delta ?? raw.message ?? part);
       if (!content.trim()) {
         return [];
       }
@@ -238,7 +243,7 @@ export class OpenCodeSessionsProvider implements IProviderSessions {
     }
 
     if (type === 'reasoning') {
-      const content = extractText(raw.text ?? raw.delta ?? raw.message);
+      const content = extractText(raw.text ?? raw.delta ?? raw.message ?? part);
       if (!content.trim()) {
         return [];
       }
@@ -254,8 +259,16 @@ export class OpenCodeSessionsProvider implements IProviderSessions {
     }
 
     if (type === 'tool_use') {
-      const toolName = readOptionalString(raw.tool) ?? readOptionalString(raw.name) ?? 'Tool';
-      const toolId = readOptionalString(raw.callID) ?? readOptionalString(raw.toolCallId) ?? baseId;
+      const state = readObjectRecord(part.state) ?? {};
+      const toolName = readOptionalString(raw.tool)
+        ?? readOptionalString(raw.name)
+        ?? readOptionalString(part.tool)
+        ?? 'Tool';
+      const toolId = readOptionalString(raw.callID)
+        ?? readOptionalString(raw.toolCallId)
+        ?? readOptionalString(part.callID)
+        ?? readOptionalString(part.id)
+        ?? baseId;
       const toolMessage = createNormalizedMessage({
         id: baseId,
         sessionId: eventSessionId,
@@ -263,14 +276,16 @@ export class OpenCodeSessionsProvider implements IProviderSessions {
         provider: PROVIDER,
         kind: 'tool_use',
         toolName,
-        toolInput: raw.input ?? raw.arguments ?? {},
+        toolInput: raw.input ?? raw.arguments ?? state.input ?? {},
         toolId,
       });
 
-      if (raw.output !== undefined || raw.error !== undefined) {
+      const output = raw.output ?? state.output;
+      const error = raw.error ?? state.error;
+      if (output !== undefined || error !== undefined) {
         toolMessage.toolResult = {
-          content: formatToolContent(raw.output ?? raw.error),
-          isError: raw.error !== undefined,
+          content: formatToolContent(output ?? error),
+          isError: error !== undefined,
         };
       }
 
@@ -278,13 +293,15 @@ export class OpenCodeSessionsProvider implements IProviderSessions {
     }
 
     if (type === 'error') {
+      const content = readOptionalString(raw.error)
+        ?? extractText(raw.error ?? raw.message ?? part);
       return [createNormalizedMessage({
         id: baseId,
         sessionId: eventSessionId,
         timestamp,
         provider: PROVIDER,
         kind: 'error',
-        content: readOptionalString(raw.error) ?? readOptionalString(raw.message) ?? 'Unknown OpenCode error',
+        content: content.trim() ? content : 'Unknown OpenCode error',
       })];
     }
 

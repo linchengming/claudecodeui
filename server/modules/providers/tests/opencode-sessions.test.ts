@@ -417,6 +417,42 @@ test('OpenCode sessions provider normalizes quoted live text and skips user echo
   assert.deepEqual(userEcho, []);
 });
 
+test('OpenCode sessions provider normalizes 2.x events that carry their payload on part', () => {
+  const provider = new OpenCodeSessionsProvider();
+
+  const [text] = provider.normalizeMessage({
+    type: 'text',
+    sessionID: 'open-session-live',
+    part: { id: 'prt_1', messageID: 'msg_1', type: 'text', text: 'hello from part' },
+  }, null);
+  assert.equal(text?.kind, 'stream_delta');
+  assert.equal(text?.content, 'hello from part');
+
+  const [reasoning] = provider.normalizeMessage({
+    type: 'reasoning',
+    sessionID: 'open-session-live',
+    part: { type: 'reasoning', text: 'thinking in part' },
+  }, null);
+  assert.equal(reasoning?.kind, 'thinking');
+  assert.equal(reasoning?.content, 'thinking in part');
+
+  const [tool] = provider.normalizeMessage({
+    type: 'tool_use',
+    sessionID: 'open-session-live',
+    part: {
+      id: 'prt_tool',
+      type: 'tool',
+      tool: 'read',
+      state: { status: 'completed', input: { filePath: 'probe.txt' }, output: 'hello from probe' },
+    },
+  }, null);
+  assert.equal(tool?.kind, 'tool_use');
+  assert.equal(tool?.toolName, 'read');
+  assert.equal(tool?.toolId, 'prt_tool');
+  assert.deepEqual(tool?.toolInput, { filePath: 'probe.txt' });
+  assert.deepEqual(tool?.toolResult, { content: 'hello from probe', isError: false });
+});
+
 test('OpenCode sessions provider reads sqlite history and token usage', { concurrency: false }, async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'opencode-session-history-'));
   const workspacePath = path.join(tempRoot, 'workspace');
